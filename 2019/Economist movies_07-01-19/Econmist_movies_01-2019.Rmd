@@ -1,0 +1,84 @@
+---
+title: "TT - Economist movies"
+output: 
+  html_document: 
+    keep_md: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(tidyverse)
+library(tidytext)
+library(lubridate)
+library(scales)
+
+theme_set(theme_minimal())
+```
+
+Load raw CSV data and view
+```{r}
+raw_movie_data <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-01-08/IMDb_Economist_tv_ratings.csv")
+```
+
+Clean up data: splitting genre column, removing title id and parsing date
+```{r}
+movie_data_clean <- raw_movie_data %>%
+  select(-titleId) %>%
+  rename(Season = seasonNumber) %>%
+  separate(genres, into = c("G1", "G2", "G3"), sep = ",") %>%
+  mutate(date = ymd(date),
+         G3 = replace_na(G3, "")) %>%
+  gather(key = Genre_num, value = Genre, c("G1", "G2", "G3")) %>%
+  arrange(title, Genre) %>%
+  filter(Genre != "") %>%
+  select(-Genre_num)
+```
+
+How many types of each genre are there?
+```{r}
+genre_count <- movie_data_clean %>%
+  distinct(title, .keep_all = T) %>%  
+  count(Genre) %>%
+  ggplot(aes(reorder(Genre,-n), n, fill = Genre)) +
+  geom_col(show.legend = F) +
+  labs(y = "Frequency") +
+  scale_y_continuous(labels = comma_format())
+
+genre_count
+```
+
+
+Which genres had the most amount of seasons?
+```{r}
+
+```
+
+Filter clean data for shows with 4 - 10 seasons and see how the rating 
+changes across seasons
+```{r}
+seasonal_fluctuations <- movie_data_clean %>%
+  filter(title %in% season_vec) %>%
+  select(-Genre, -date) %>%
+  group_by(title, Season) %>%
+  summarise_all(mean)
+```
+
+
+How does the average rating chnage for shows within certain genres?
+includes replicates across genres 
+```{r}
+genre_fluctuations <- movie_data_clean %>%
+  filter(title %in% season_vec) 
+  select(-title, -date) %>%
+  group_by(Genre, Season) %>%
+  summarise_all(mean)
+
+genre_chart <- ggplot(genre_fluctuations, aes(x = Season, y = av_rating, 
+                                              fill = Genre)) +
+  geom_bar(stat = "identity", position = position_dodge2(width = 0.9))
+
+genre_chart
+  
+```
+
