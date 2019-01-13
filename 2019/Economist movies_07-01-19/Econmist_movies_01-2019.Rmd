@@ -51,34 +51,103 @@ genre_count
 
 Which genres had the most amount of seasons?
 ```{r}
+season_by_genre <- movie_data_clean %>%
+  group_by(title) %>%
+  mutate(max_season = max(Season)) %>%
+  distinct(title, .keep_all = T) %>%
+  ungroup() %>%
+  group_by(Genre) %>%
+  summarise(Av_seasons = mean(max_season),
+            SE = sd(max_season/sqrt(length(max_season)))) %>%
+  mutate(ymin = Av_seasons - SE,
+         ymax = Av_seasons + SE) %>%
+  ggplot(aes(x = reorder(Genre,-Av_seasons), y = Av_seasons, fill = Genre)) +
+  geom_col(show.legend = F) +
+  geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2) +
+  labs(y = "Average number of seasons",
+       caption = "error bars highlight SEM",
+       x = "Genre")
 
+season_by_genre
+  
 ```
 
-Filter clean data for shows with 4 - 10 seasons and see how the rating 
-changes across seasons
+How do the ratings and viewership of genres change across seasons? 
+limited to 10 seasons
 ```{r}
-seasonal_fluctuations <- movie_data_clean %>%
-  filter(title %in% season_vec) %>%
-  select(-Genre, -date) %>%
-  group_by(title, Season) %>%
-  summarise_all(mean)
-```
-
-
-How does the average rating chnage for shows within certain genres?
-includes replicates across genres 
-```{r}
-genre_fluctuations <- movie_data_clean %>%
-  filter(title %in% season_vec) 
-  select(-title, -date) %>%
+seasonal_changes <- movie_data_clean %>%
+  distinct(Season, title, .keep_all = T) %>%
+  filter(Season < 21) %>%
   group_by(Genre, Season) %>%
-  summarise_all(mean)
+  summarise(avg_rating = mean(av_rating),
+            avg_share = mean(share),
+            rating_SE = sd(av_rating)/sqrt(length(av_rating)),
+            share_SE = sd(share)/sqrt(length(share)),
+            shows = n()) %>%
+  mutate(ymin_rat = avg_rating - rating_SE,
+         ymax_rat = avg_rating + rating_SE,
+         ymin_share = avg_share- share_SE,
+         ymax_share = avg_share + share_SE) %>%
+  select(-rating_SE, -share_SE)
 
-genre_chart <- ggplot(genre_fluctuations, aes(x = Season, y = av_rating, 
-                                              fill = Genre)) +
-  geom_bar(stat = "identity", position = position_dodge2(width = 0.9))
+seasonal_ratings <- seasonal_changes %>%
+  ggplot(aes(Season, avg_rating, col = Genre)) +
+  geom_line() +
+  geom_point() +
+  labs(y = "Average rating per season") +
+  scale_color_viridis_d() +
+  scale_y_continuous(limits = c(0,10))
 
-genre_chart
+seasonal_ratings
+
+seasonal_share <- seasonal_changes %>%
+  ggplot(aes(Season, avg_share, col = Genre)) +
+  geom_line() +
+  geom_point() +
+  labs(y = "Average audience share per season") +
+  scale_color_viridis_d() +
+  scale_y_continuous(limits = c(0,6))
+
+seasonal_share
+
+```
+
+
+is there a correlation between date, genre and rating / viewership?
+```{r}
+date_impacted_figures <- movie_data_clean %>%
+  distinct(title, .keep_all = T) %>%
+  mutate(Month = month(date, label = T),
+         Year = year(date)) %>%
+  group_by(Year, Month, Genre) %>%
+  summarise(avg_rating = mean(av_rating),
+            avg_share = mean(share))
+
+
+genre_years <- date_impacted_figures %>%
+  group_by(Year, Genre) %>%
+  summarise(avg_rating = mean(avg_rating),
+            avg_share = mean(avg_share)) %>%
+  gather(Measure, Score, avg_rating, avg_share) %>%
+  ggplot(aes(x = Year, y = Score, col = Measure, group = Measure)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~Genre)
+
+genre_years
+
+
+genre_months <- date_impacted_figures %>%
+  group_by(Month, Genre) %>%
+  summarise(avg_rating = mean(avg_rating),
+            avg_share = mean(avg_share)) %>%
+  gather(Measure, Score, avg_rating, avg_share) %>%
+  ggplot(aes(x = Month, y = Score, col = Measure, group = Measure)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~Genre)
+
+genre_months
   
 ```
 
