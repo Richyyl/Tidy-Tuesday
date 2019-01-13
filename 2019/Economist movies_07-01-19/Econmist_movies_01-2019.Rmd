@@ -42,7 +42,8 @@ genre_count <- movie_data_clean %>%
   count(Genre) %>%
   ggplot(aes(reorder(Genre,-n), n, fill = Genre)) +
   geom_col(show.legend = F) +
-  labs(y = "Frequency") +
+  labs(y = "Frequency",
+       x = "Genre") +
   scale_y_continuous(labels = comma_format())
 
 genre_count
