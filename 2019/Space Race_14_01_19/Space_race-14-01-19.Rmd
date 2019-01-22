@@ -1,0 +1,222 @@
+---
+title: "Space race_14-01-2019"
+author: "Richyl"
+date: "14 January 2019"
+output: 
+  html_document: 
+    df_print: tibble
+    keep_md: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	message = FALSE,
+	warning = FALSE,
+	include = FALSE
+)
+```
+
+Load packages
+```{r}
+library(tidyverse)
+library(scales)
+library(lubridate)
+library(countrycode)
+theme_set(theme_minimal())
+```
+
+Load raw data
+```{r}
+raw_agencies <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-01-15/agencies.csv") 
+
+agencies_clean <- raw_agencies %>%
+  mutate(tstart = str_trim(word(tstart, 1), side = "both"),
+         tstart = str_replace(tstart, "\\-|\\*|\\?|s", ""),
+         tstop = str_trim(word(tstop, 1), side = "both"),
+         tstop = str_replace(tstop, "\\-|\\*", as.character(year(now()))),
+         tstop = str_replace(tstop, "\\?", ""),
+         agency_type = str_to_title(agency_type),
+         Country = countrycode(state_code, "iso2c", "country.name"),
+         Country = case_when(state_code == "F" ~ "France",
+                             state_code == "I" ~ "Italy",
+                             state_code == "J" ~ "Japan",
+                             state_code == "SU" ~ "Soviet Union",
+                             state_code == "UK" ~ "United Kingodom",
+                             state_code %in% c("CYM", "I-ELDO", "I-ESA") ~ "EU",
+                             T ~ Country))
+
+raw_launches <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-01-15/launches.csv") 
+
+launches_clean <- raw_launches %>%
+  mutate(launch_date = ymd(launch_date),
+         make = word(type, 1),
+         mission_sub = mission,
+         mission = word(mission_sub, 1),
+         Country = countrycode(state_code, "iso2c", "country.name"),
+         Country = case_when(state_code == "F" ~ "France",
+                             state_code == "I" ~ "Italy",
+                             state_code == "J" ~ "Japan",
+                             state_code == "SU" ~ "Soviet Union",
+                             state_code == "UK" ~ "United Kingodom",
+                             state_code %in% c("CYM", "I-ELDO", "I-ESA") ~ "EU",
+                             T ~ Country))
+```
+
+ 
+Dive into the agencies datset: Longest running, country with most launches, types of agency and type per country
+```{r}
+
+oldest_agency <- agencies_clean %>%
+  filter(tstart != "") %>%
+  mutate_at(.vars = vars(tstart:tstop), .funs = as.numeric) %>%
+  mutate(Age = tstop - tstart) %>%
+  arrange(desc(Age)) %>%
+  ggplot(aes(x = Age)) +
+  geom_histogram()
+
+oldest_agency
+
+most_launches <- agencies_clean %>%
+  group_by(Country) %>%
+  summarise(Launches = sum(count)) %>%
+  mutate(Country = fct_reorder(Country, Launches)) %>%
+  ggplot(aes(x = Country, y = Launches, fill = Country)) +
+  geom_col(show.legend = F) +
+  coord_flip() +
+  scale_y_continuous(labels = comma_format())
+
+most_launches
+
+ggsave("most_launches.jpg")
+
+agency_launches <- agencies_clean %>%
+  group_by(agency_type) %>%
+  summarise(Launches = sum(count)) %>%
+  mutate(Agency = fct_reorder(agency_type, Launches)) %>%
+  ggplot(aes(x = Agency, y = Launches, fill = Agency)) +
+  geom_col(show.legend = F) +
+  coord_flip() +
+  scale_y_continuous(labels = comma_format())
+
+agency_launches
+
+
+
+```
+
+Dive into the launches dataset, looking at share of launches by decade, type of rocket and missions
+```{r}
+launches_by_year <- launches_clean %>%
+  count(launch_year) %>%
+  ggplot(aes(x = launch_year, y = n, group = 1)) +
+  geom_line() +
+  geom_point() +
+  geom_vline(xintercept = c(1957, 1975), col = "red") +
+  labs(title = "Rocket launches rose through the 60s & 70s \n before dropping in the 90s",
+       subtitile = "Red lines represent the space race period",
+       x = "Launch year",
+       y = "Number of launches")
+
+launches_by_year
+
+ggsave("yearly_launches.jpg")
+
+launch_share_by_decade <- launches_clean %>%
+  mutate(decade = launch_year %/% 10 * 10,
+         agency_type = str_to_title(agency_type)) %>%
+  group_by(decade, agency_type) %>%
+  summarise(Missions = n()) %>%
+  ungroup() %>%
+  complete(agency_type, decade, fill = list(Missions = 0)) %>%
+  group_by(decade) %>%
+  mutate(percentage = round(Missions/ sum(Missions), digits = 2)) %>%
+  ggplot(aes(x = decade, y = percentage, fill = agency_type)) +
+  geom_area() +
+  labs(x = "Decade",
+       y = "Percentage of launches",
+       fill = "Type of agency") +
+  scale_y_continuous(labels = percent_format())
+
+launch_share_by_decade
+
+ggsave("Decade_launches.jpg")
+
+rocket_types <- launches_clean %>%
+  count(make) %>%
+  top_n(15) %>%
+  mutate(make = fct_reorder(make, n)) %>%
+  ggplot(aes(x = make, y = n, fill = make)) +
+  geom_col(show.legend = F) +
+  coord_flip() +
+  labs(x = "Rocket make",
+       y = "Number of launches made")
+
+rocket_types
+
+mission_types <- launches_clean %>%
+  count(mission) %>%
+  top_n(15) %>%
+  mutate(mission = fct_reorder(mission, n)) %>%
+  ggplot(aes(x = mission, y = n, fill = mission)) +
+  geom_col(show.legend = F) +
+  coord_flip() +
+  labs(x = "Mission title",
+       y = "Number of attempts")
+
+mission_types
+```
+
+where are the non public sector entities located and when did they get on the scene?
+```{r}
+non_public_agencies <- agencies_clean %>%
+  filter(agency_type != "State")
+
+non_public_countries <- non_public_agencies %>%
+  count(Country, agency_type) %>%
+  ggplot(aes(x = agency_type, y = n, fill = Country)) +
+  geom_col(show.legend = T, position = position_dodge2(width = 0.9)) +
+  coord_flip() +
+  labs(y = "Number of private / startup entities",
+       x = "Agency type")
+
+non_public_countries
+
+ggsave("non state agencies.jpg")
+
+non_public_starts <- non_public_agencies %>%
+  arrange(tstart) %>%
+  mutate(sorter = 1:nrow(.),
+         short_name = fct_reorder(short_name, sorter)) %>% 
+  filter(tstart != "") %>%
+  ggplot(aes(x = tstart, y = short_name, col = agency_type)) +
+  geom_point(show.legend = F) +
+  labs(x = "Start date",
+       y = "Company")
+
+non_public_starts  
+```
+
+how successful have startups been in the space race?
+```{r}
+startup_success <- launches_clean %>%
+  filter(agency_type == "startup") %>%
+  group_by(launch_year) %>%
+  count(category) %>%
+  complete(launch_year, fill = list(n = 0)) %>%
+  ungroup() %>%
+  mutate(launch_year = factor(launch_year)) %>%
+  ggplot(aes(x = launch_year, y = n, col = category, group = category)) +
+  geom_jitter() +
+  geom_smooth(se = F, method = "auto", span = 1) +
+  labs(y = "Number of launches",
+       x = "Launch year",
+       col = "Mission outcome",
+       title = "Startups have shown increasing launch success,
+       since initial launches")
+
+ggsave("startup_success.jpg")
+
+```
+
