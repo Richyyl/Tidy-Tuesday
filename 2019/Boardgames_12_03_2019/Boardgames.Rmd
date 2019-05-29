@@ -1,0 +1,88 @@
+---
+title: "Boardgames"
+author: "Richyyl"
+date: "12 March 2019"
+output: 
+  html_document: 
+    keep_md: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+load packages
+```{r}
+
+library(tidyverse)
+library(here)
+library(ebbr)
+library(janitor)
+theme_set(theme_minimal())
+
+```
+
+Load data and clean
+```{r}
+
+board_games <- read_csv(here("board_games.csv"))
+
+clean_games <- board_games %>%
+  clean_names() %>%
+  select(-image, -thumbnail, -artist, -designer, -compilation, -expansion) %>%
+  separate_rows(category, sep = ",") %>%
+  filter(min_players > 0)
+  
+
+```
+
+investigate rating per players and over time
+```{r}
+
+##rating per players
+
+clean_games %>%
+  mutate(min_players = factor(min_players)) %>%
+  group_by(min_players) %>%
+  summarise(mean_rating = mean(average_rating),
+            SE = sd(average_rating) / sqrt(length(average_rating))) %>%
+  mutate(ymin = mean_rating - SE,
+         ymax = mean_rating + SE) %>% 
+  ggplot(aes(x = min_players, y = mean_rating)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = ymin, ymax = ymax)) +
+  expand_limits(x = 0, y = 0)
+
+##rating over time
+
+clean_games %>%
+  group_by(year_published) %>%
+  summarise(mean_rating = mean(average_rating),
+            SE = sd(average_rating) / sqrt(length(average_rating))) %>%
+  mutate(ymin = mean_rating - SE,
+         ymax = mean_rating + SE) %>% 
+  ggplot(aes(x = year_published, y = mean_rating)) +
+  geom_line(col = "black") +
+  geom_ribbon(aes(ymin = ymin, ymax = ymax), fill = "blue", alpha = 0.3) +
+  expand_limits(y = 0)
+
+
+```
+
+How has category populatiry chnaged over time?
+```{r}
+
+clean_games %>%
+  group_by(year_published, category) %>%
+  mutate(rating_change = average_rating - lag(average_rating),
+            av_change = mean(rating_change, na.rm = T)) %>%
+  top_n(15, av_change) %>%
+  ggplot(aes(x = year_published, y = rating_change, group = category)) +
+  geom_line(show.legend = F)
+
+
+
+```
+
